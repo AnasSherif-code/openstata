@@ -8,7 +8,7 @@ import pandas as pd
 
 from openstata.core.dataset import Dataset
 from openstata.core.errors import StataError
-from openstata.io import read_delimited, read_dta, write_delimited, write_dta
+from openstata.io import read_delimited, read_dta, read_excel, read_jasp, write_delimited, write_dta
 from openstata.lang.executor import compute_sample_mask
 from openstata.lang.parser import (
     ParsedCommand,
@@ -68,29 +68,44 @@ class SaveCmd(BaseCommand):
 
 
 class ImportCmd(BaseCommand):
-    spec = CommandSpec("import", 3, "Import external files (e.g. import delimited)")
+    spec = CommandSpec("import", 3, "Import external files (delimited, excel, jasp)")
 
     def run(self, cmd: ParsedCommand, ctx: ExecutionContext) -> None:
         toks = split_top_level_tokens(cmd.main_args)
-        if not toks or toks[0].lower() != "delimited":
-            raise StataError("only 'import delimited' is currently supported", rc=198)
+        if not toks:
+            raise StataError("import delimited/excel/jasp filename required", rc=198)
+        kind = toks[0].lower()
+        if kind in ("xlsx", "xls"):
+            kind = "excel"
+        if kind not in ("delimited", "excel", "jasp"):
+            raise StataError(
+                "only 'import delimited', 'import excel', and 'import jasp' are currently supported",
+                rc=198,
+            )
         if ctx.dataset.dirty and ctx.dataset.nvars > 0 and not cmd.options.get("clear"):
             raise StataError("no; dataset in memory has changed since last saved", rc=4)
         fpath = cmd.using_path or (toks[1] if len(toks) >= 2 else "")
         if not fpath:
             raise StataError("filename required", rc=198)
         p = _resolve_path(fpath, ctx)
-        delim = cmd.options.get("delimiters") or cmd.options.get("delimiter")
-        delim_str = strip_quotes(str(delim)) if isinstance(delim, str) else None
-        loaded = read_delimited(p, delimiter=delim_str)
+        if kind == "delimited":
+            delim = cmd.options.get("delimiters") or cmd.options.get("delimiter")
+            delim_str = strip_quotes(str(delim)) if isinstance(delim, str) else None
+            loaded = read_delimited(p, delimiter=delim_str)
+        elif kind == "excel":
+            sheet = cmd.options.get("sheet")
+            sheet_name = strip_quotes(str(sheet)) if isinstance(sheet, str) and sheet else None
+            loaded = read_excel(p, sheet=sheet_name)
+        else:
+            loaded = read_jasp(p)
         ctx.dataset.df = loaded.df
         ctx.dataset.meta = loaded.meta
         ctx.dataset.missing_codes = loaded.missing_codes
         ctx.dataset.value_labels = loaded.value_labels
-        ctx.dataset.data_label = ""
+        ctx.dataset.data_label = getattr(loaded, "data_label", "")
         ctx.dataset.source_path = str(p)
         ctx.dataset.dirty = False
-        ctx.console.write(f"({loaded.nvars} vars, {loaded.nobs} obs)")
+        ctx.console.write(f"({ctx.dataset.nvars} vars, {ctx.dataset.nobs} obs)")
 
 
 class ExportCmd(BaseCommand):
