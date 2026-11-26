@@ -45,6 +45,16 @@ from openstata.commands.stats_cmds import (
 )
 from openstata.causal.didregress import DidregressCmd
 from openstata.causal.gencohort import GencohortCmd
+from openstata.commands.econ_extras import (
+    BayesbootCmd,
+    EsizeCmd,
+    LincomCmd,
+    MeanCmd,
+    ProportionCmd,
+    RatioCmd,
+    TotalCmd,
+)
+from openstata.commands.hdfe_cmds import AregCmd, CfCmd, IvregressCmd
 
 from openstata.commands.system_cmds import (
     AdopathCmd,
@@ -110,6 +120,18 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         # Causal inference
         DidregressCmd(),
         GencohortCmd(),
+        # Extended estimation
+        AregCmd(),
+        IvregressCmd(),
+        CfCmd("regress"),
+        CfCmd("probit"),
+        EsizeCmd(),
+        LincomCmd(),
+        BayesbootCmd(),
+        MeanCmd(),
+        ProportionCmd(),
+        RatioCmd(),
+        TotalCmd(),
         # I/O & inspection
         UseCmd(),
         SaveCmd(),
