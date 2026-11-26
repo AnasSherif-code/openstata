@@ -4,6 +4,9 @@ This implementation supports the simplest DID setup:
 It fits an OLS model with intercept, treatment indicator, time indicator,
 and their interaction. The coefficient on the interaction term is the
 Difference‑in‑Differences estimate.
+Variance estimation mirrors `regress`: ordinary OLS standard errors by
+default, HC1 robust standard errors with `robust`, and cluster-robust
+standard errors with `cluster(var)`.
 More advanced options (over(), noxinteract, heterogeneous DID, etc.) are
 out of scope for this minimal version and can be added later.
 """
@@ -11,7 +14,6 @@ out of scope for this minimal version and can be added later.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 from openstata.core.errors import StataError
 from openstata.plugins.base import BaseCommand, CommandSpec, ExecutionContext
 from openstata.lang.parser import ParsedCommand
@@ -41,7 +43,7 @@ class DidregressCmd(BaseCommand):
         ds.require_var(treat)
         ds.require_var(time)
         # Optional robust/cluster handling – reuse existing logic for VCE
-        vce_kind, vce_opt = self._parse_vce(cmd)
+        vce_kind, cl_var = self._parse_vce(cmd)
         # Build design matrix manually (no factor expansion needed for this simple case)
         df = ds.df
         y = df[depvar].to_numpy(dtype=float)
@@ -55,18 +57,66 @@ class DidregressCmd(BaseCommand):
         w = expand_weights(df, None)
         y_w, X_w = apply_weights(y, X, w)
         # OLS estimate
-        beta, residuals, rank, s = np.linalg.lstsq(X_w, y_w, rcond=None)
-        # Compute standard errors (robust/cluster not implemented – use simple OLS SE)
+        beta, _, rank, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
         n, k = X_w.shape
+        if n <= k:
+            raise StataError("insufficient observations", rc=2001)
         resid = y_w - X_w @ beta
-        sigma2 = (resid @ resid) / (n - k)
-        var_beta = sigma2 * np.linalg.inv(X_w.T @ X_w)
-        se = np.sqrt(np.diag(var_beta))
-        # Output table – reuse helper from model_cmds if available, otherwise simple print
-        # We'll mimic the _print_coef_table signature used in regress
+        df_r = n - rank
+        rss = float(resid @ resid)
+
+        xtx_inv = np.linalg.pinv(X_w.T @ X_w)
+        n_clust = None
+        if vce_kind == "robust":
+            vcetype = "Robust"
+            meat = X_w.T @ ((resid**2)[:, None] * X_w)
+            V = (n / df_r) * (xtx_inv @ meat @ xtx_inv)
+            df_t = df_r
+        elif vce_kind == "cluster":
+            vcetype = "Robust"
+            ds.require_var(cl_var)
+            clusters = df[cl_var].to_numpy()
+            uniq_c, inv_idx = np.unique(clusters, return_inverse=True)
+            G = len(uniq_c)
+            if G < 2:
+                raise StataError("cluster variable must have at least 2 clusters", rc=198)
+            scores = X_w * resid[:, None]
+            cluster_sums = np.zeros((G, k), dtype=np.float64)
+            np.add.at(cluster_sums, inv_idx, scores)
+            meat = cluster_sums.T @ cluster_sums
+            scale = (G / (G - 1.0)) * ((n - 1.0) / df_r)
+            V = scale * (xtx_inv @ meat @ xtx_inv)
+            df_t = G - 1
+            n_clust = G
+        else:
+            vcetype = "OLS"
+            V = (rss / df_r) * xtx_inv
+            df_t = df_r
+        se = np.sqrt(np.maximum(0.0, np.diag(V)))
+
+        # Output header + coefficient table, same layout as `regress`
         from openstata.commands.model_cmds import _print_coef_table
         names = ["_cons", treat, time, f"{treat}#c.{time}"]
-        _print_coef_table(ctx, depvar, names, beta, se, df_t=n - k)
+        ctx.console.write(
+            f"Difference-in-Differences regression ({vcetype})"
+            f"{' ' * max(1, 30 - len(vcetype))}Number of obs     = {n:>10,}"
+        )
+        if n_clust is not None:
+            ctx.console.write(
+                f"                                (Std. err. adjusted for {n_clust} clusters in {cl_var})"
+            )
+        _print_coef_table(ctx, depvar, names, beta, se, df_t=df_t)
+        # e() results so post-estimation commands can see the model
+        ctx.state.e.clear()
+        ctx.state.e.scalars.update(
+            {
+                "N": float(n),
+                "df_r": float(df_r),
+                "df_m": float(k - 1),
+            }
+        )
+        ctx.state.e.matrices["b"] = beta.reshape(1, -1)
+        ctx.state.e.matrices["V"] = V.copy()
 
     def _parse_vce(self, cmd: ParsedCommand) -> tuple[str, str | None]:
         # Minimal reimplementation of _parse_vce from model_cmds (robust/cluster only)

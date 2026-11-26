@@ -44,6 +44,9 @@ class GencohortCmd(BaseCommand):
         ds.require_var(groupvar)
         # Compute cohort series
         cohort_series = make_cohort(ds.df, timevar, groupvar, cohortvar=cohortvar)
+        # Keep the same dtype as the time variable (Series.map may produce a
+        # platform-dependent integer width)
+        cohort_series = cohort_series.astype(ds.df[timevar].dtype)
         # Insert into dataset – replace if already present
         ds.df[cohortvar] = cohort_series
         # No output, just a confirmation message similar to Stata

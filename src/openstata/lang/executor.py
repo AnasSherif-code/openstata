@@ -212,10 +212,16 @@ class ScriptRunner:
             raise ContinueSignal()
 
         effective_silent = (silent or parsed.quietly) and not parsed.noisily
+        # Route output to the runner's console (may be replaced by embedders/tests);
+        # silence is still honored via a no-op console.
+        if effective_silent:
+            console = DefaultConsole(self.state, silent=True)
+        else:
+            console = self.console
         ctx = ExecutionContext(
             dataset=self.dataset,
             state=self.state,
-            console=DefaultConsole(self.state, silent=effective_silent),
+            console=console,
             runner=self,
         )
 

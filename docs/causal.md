@@ -15,11 +15,11 @@ didregress depvar, treat(treatvar) time(timevar) [robust] [cluster(clustvar)]
 ```
 
 - `depvar` — outcome variable (first and only positional argument).
-- `treat(treatvar)` — binary treatment indicator (required). The option may be
-  abbreviated `treat()` only; use the full option name.
+- `treat(treatvar)` — binary treatment indicator (required).
 - `time(timevar)` — binary post-treatment period indicator (required).
-- `robust` / `cluster(clustvar)` — currently parsed but **not yet applied**;
-  ordinary OLS standard errors are reported.
+- `robust` — HC1 (heteroskedasticity-robust) standard errors.
+- `cluster(clustvar)` — cluster-robust standard errors by `clustvar`
+  (requires at least 2 clusters).
 
 ### Estimation
 
@@ -28,6 +28,16 @@ time indicator, and their interaction. The coefficient on the interaction term
 (`treatvar#c.timevar`) is the DID estimate. Coefficients, standard errors, *t*
 statistics, *p*-values, and 95% confidence intervals are printed in the same
 table format as `regress`.
+
+Variance estimation mirrors `regress`:
+
+- default: `V = s2 (X'X)^-1` with `s2 = RSS/(n-k)`; residual df = `n-k`.
+- `robust`: HC1 sandwich, `V = (n/(n-k)) (X'X)^-1 X' diag(e^2) X (X'X)^-1`.
+- `cluster(var)`: cluster-robust sandwich over the `G` clusters with the
+  Stata small-sample correction `(G/(G-1)) ((n-1)/(n-k))`; residual df = `G-1`.
+
+The fitted model is also stored in `e()` (`b`, `V`, and the `N`, `df_r`,
+`df_m` scalars) for post-estimation use.
 
 ### Example
 
@@ -46,24 +56,26 @@ didregress y, treat(treated) time(time)
 Expected output (abridged):
 
 ```
+Difference-in-Differences regression (OLS)  Number of obs = 8
 ------------------------------------------------------------------------------
            y | Coefficient   Std. err.         t    P>|t|  [95% conf. interval]
 ------------------------------------------------------------------------------
-       _cons |     5.00000  ...
+       _cons |     5.50000  ...
      treated |     3.00000  ...
-        time |     2.00000  ...
-treated#c.time |   2.00000  ...
+        time |     2.50000  ...
+treated#c.time |     2.00000  ...
 ------------------------------------------------------------------------------
 ```
 
-The interaction coefficient `2.0` recovers the true DID effect.
+The interaction coefficient `2` recovers the true DID effect. With
+`, robust` the standard errors become the HC1 sandwich values, and with
+`, cluster(id)` the cluster-robust values with a note
+`(Std. err. adjusted for N clusters in id)`.
 
 ### Limitations
 
 This is a minimal implementation. Not yet supported:
 
-- robust (HC1) and cluster-robust standard errors (the options are accepted
-  but silently ignored),
 - weighting via `[weight=...]`,
 - factor-variable expansions in `treat()`/`time()`,
 - the `over()` suboption and event-study / heterogeneous-treatment designs.
