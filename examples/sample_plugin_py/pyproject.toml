@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sample-openstata-ext"
+version = "0.1.0"
+description = "Example third-party Python plugin package for OpenStata adding the zscore command."
+requires-python = ">=3.12"
+dependencies = ["openstata>=0.1.0"]
+
+[project.entry-points."openstata.commands"]
+zscore = "sample_openstata_ext:ZscoreCmd"
+
+[tool.setuptools.packages.find]
+where = ["src"]

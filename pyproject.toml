@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openstata"
+version = "0.1.0"
+description = "Clean-room Python statistical and econometric engine with Stata-compatible syntax and extensible package support (non-commercial study & research license)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "PolyForm-Noncommercial-1.0.0" }
+dependencies = [
+    "numpy>=1.26.0",
+    "pandas>=2.1.0",
+    "scipy>=1.11.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+ui = ["rich>=13.0", "prompt_toolkit>=3.0"]
+
+[project.scripts]
+openstata = "openstata.cli.main:main"
+
+[project.entry-points."openstata.commands"]
+# Built-in commands are registered directly; third-party Python packages
+# add entries under this group pointing to BaseCommand subclasses or callables.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
