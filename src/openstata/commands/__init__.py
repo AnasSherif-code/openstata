@@ -55,6 +55,7 @@ from openstata.commands.econ_extras import (
     TotalCmd,
 )
 from openstata.commands.hdfe_cmds import AregCmd, CfCmd, IvregressCmd
+from openstata.commands.time_series import IvlpirfCmd
 
 from openstata.commands.system_cmds import (
     AdopathCmd,
@@ -171,6 +172,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         XtsetCmd(),
         XtregCmd(),
         PredictCmd(),
+        # Time-series
+        IvlpirfCmd(),
     ]
     for cmd in commands:
         registry.register(cmd)
